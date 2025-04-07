@@ -28,3 +28,9 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Dependencies
+vendor
+
+# IDE
+.idea

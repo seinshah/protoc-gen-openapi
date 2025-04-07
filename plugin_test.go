@@ -46,6 +46,7 @@ var openapiTests = []struct {
 	{name: "Custom Params with build tag set for excluding method", path: "examples/tests/customparamsexclude/", protofile: "message.proto", buildTag: []string{"public_docs"}},
 	{name: "Custom Params with build tag postman", path: "examples/tests/customparamspostmanonly/", protofile: "message.proto", buildTag: []string{"postman"}},
 	{name: "Custom Params with build tag postman and public_docs", path: "examples/tests/customparamspostmanandpublic/", protofile: "message.proto", buildTag: []string{"postman", "public_docs"}},
+	{name: "Named parameter with wildcard", path: "examples/tests/wildcardparam/", protofile: "message.proto"},
 }
 
 func TestOpenAPIProtobufNaming(t *testing.T) {

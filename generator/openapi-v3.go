@@ -84,7 +84,7 @@ func NewOpenAPIv3Generator(plugin *protogen.Plugin, conf Configuration) *OpenAPI
 		generatedSchemas:  make([]string, 0),
 		linterRulePattern: regexp.MustCompile(`\(-- (?s:.)* --\)`), // Kolla
 		pathPattern:       regexp.MustCompile("{([^=}]+)}"),
-		namedPathPattern:  regexp.MustCompile("{(.+)=(.+)}"),
+		namedPathPattern:  regexp.MustCompile("{([^{}=]+)=([^{}]+)}"),
 	}
 }
 
@@ -495,8 +495,10 @@ func (g *OpenAPIv3Generator) buildOperationV3(
 
 	// Find named path parameters like {name=shelves/*}
 	if matches := g.namedPathPattern.FindStringSubmatch(path); matches != nil {
-		// Build a list of named path parameters.
-		namedPathParameters := make([]string, 0)
+		var (
+			wildcardParamName   string
+			namedPathParameters = make([]string, 0)
+		)
 
 		// Add the "name=" "name" value to the list of covered parameters.
 		coveredParameters = append(coveredParameters, matches[1])
@@ -505,31 +507,73 @@ func (g *OpenAPIv3Generator) buildOperationV3(
 		parts := strings.Split(starredPath, "/")
 		// The starred path is assumed to be in the form "things/*/otherthings/*".
 		// We want to convert it to "things/{thingsId}/otherthings/{otherthingsId}".
-		for i := 0; i < len(parts)-1; i += 2 {
+		for i := 0; i < len(parts); i += 2 {
 			section := parts[i]
 			namedPathParameter := g.findAndFormatFieldName(section, inputMessage)
-			namedPathParameter = singular(namedPathParameter)
-			parts[i+1] = "{" + namedPathParameter + "}"
+
+			if namedPathParameter == "**" {
+				namedPathParameter = g.findAndFormatFieldName(matches[1], inputMessage)
+				wildcardParamName = namedPathParameter
+			} else {
+				namedPathParameter = singular(namedPathParameter)
+			}
+
 			namedPathParameters = append(namedPathParameters, namedPathParameter)
+
+			if wildcardParamName == "" {
+				parts[i+1] = "{" + namedPathParameter + "}"
+
+				continue
+			}
+
+			// If we detect a wildcard parameter, we stop processing anything else in the path.
+			parts[i] = "{" + namedPathParameter + "}"
+			parts = parts[:i+1]
+
+			break
 		}
+
 		// Rewrite the path to use the path parameters.
 		newPath := strings.Join(parts, "/")
 		path = strings.Replace(path, matches[0], newPath, 1)
 
 		// Add the named path parameters to the operation parameters.
 		for _, namedPathParameter := range namedPathParameters {
+			var (
+				allowReserved bool
+				paramPattern  string
+
+				fieldDescription = "The " + namedPathParameter + " id."
+			)
+
+			if wildcardParamName == namedPathParameter {
+				allowReserved = true
+				paramPattern = ".+"
+
+				field := g.findField(namedPathParameter, inputMessage)
+
+				// wildcard parameter is not found in the input message
+				if field == nil {
+					continue
+				}
+
+				fieldDescription = g.filterCommentString(field.Comments.Leading, true)
+			}
+
 			parameters = append(parameters,
 				&v3.ParameterOrReference{
 					Oneof: &v3.ParameterOrReference_Parameter{
 						Parameter: &v3.Parameter{
-							Name:        namedPathParameter,
-							In:          "path",
-							Required:    true,
-							Description: "The " + namedPathParameter + " id.",
+							Name:          namedPathParameter,
+							In:            "path",
+							Required:      true,
+							Description:   fieldDescription,
+							AllowReserved: allowReserved,
 							Schema: &v3.SchemaOrReference{
 								Oneof: &v3.SchemaOrReference_Schema{
 									Schema: &v3.Schema{
-										Type: "string",
+										Type:    "string",
+										Pattern: paramPattern,
 									},
 								},
 							},
