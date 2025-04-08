@@ -36,7 +36,7 @@ import (
 	wk "github.com/google/gnostic/cmd/protoc-gen-openapi/generator/wellknown"
 	v3 "github.com/google/gnostic/openapiv3"
 
-	open_api_extensions "github.com/kollalabs/protoc-gen-openapi/openapi"
+	open_api_extensions "github.com/seinshah/protoc-gen-openapi/openapi"
 )
 
 type Configuration struct {
