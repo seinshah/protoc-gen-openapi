@@ -25,6 +25,7 @@ extend google.protobuf.FileOptions {
 message Parameters {
     repeated Header headers = 1;
     repeated string build_tags = 2;
+    map<string,CustomResponse> custom_responses = 3;
 }
 
 message Header {
@@ -33,4 +34,9 @@ message Header {
     optional string description = 3;
     optional bool required = 4;
     optional string example = 5;
+}
+
+message CustomResponse {
+    optional string description = 1;
+    optional string message_ref = 2;
 }

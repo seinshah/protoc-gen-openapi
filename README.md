@@ -153,3 +153,43 @@ Adding more can easily be done in the function `addValidationRules` in `/generat
 
 ### OAS3 header support
 
+### Additional Responses
+Apart from the `200` response and the default status (if enabled), we can 
+use service options to add more response schemas to the specification.
+
+If a custom response with `default` key is provided and `DefaultResponse` 
+flag is enabled, custom response overrides the default `google.rpc.Status` 
+response message.
+
+`message_ref` is a reference to the full proto message name. A full proto 
+message name is `package_name.message_name`. If the referenced message is 
+not in the current package, respective package must be imported. An error 
+message will be logged if the referenced message is not found.
+
+```protobuf
+syntax = "proto3";
+
+package tests.customparams.message.v1;
+
+import "openapi/annotations.proto";
+
+service Messaging {
+  option (openapi.service_params) = {
+    custom_responses: {
+      key: "403"
+      value: {
+        description: "Forbidden"
+        message_ref: "tests.customparams.message.v1.ErrorResponse"
+      }
+    }
+    custom_responses: {
+      key: "default"
+      value: {
+        description: "Rest of the errors"
+        message_ref: "tests.customparams.message.v1.ErrorResponse"
+      }
+    }
+  };
+}
+```
+

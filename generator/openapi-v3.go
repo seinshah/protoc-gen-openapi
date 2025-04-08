@@ -17,6 +17,7 @@ package generator
 
 import (
 	"fmt"
+	"google.golang.org/grpc/grpclog"
 	"log"
 	"net/url"
 	"regexp"
@@ -72,6 +73,8 @@ type OpenAPIv3Generator struct {
 	linterRulePattern *regexp.Regexp
 	pathPattern       *regexp.Regexp
 	namedPathPattern  *regexp.Regexp
+
+	messageRegistry map[string]*protogen.Message
 }
 
 // NewOpenAPIv3Generator creates a new generator for a protoc plugin invocation.
@@ -85,6 +88,8 @@ func NewOpenAPIv3Generator(plugin *protogen.Plugin, conf Configuration) *OpenAPI
 		linterRulePattern: regexp.MustCompile(`\(-- (?s:.)* --\)`), // Kolla
 		pathPattern:       regexp.MustCompile("{([^=}]+)}"),
 		namedPathPattern:  regexp.MustCompile("{([^{}=]+)=([^{}]+)}"),
+
+		messageRegistry: make(map[string]*protogen.Message),
 	}
 }
 
@@ -116,6 +121,14 @@ func (g *OpenAPIv3Generator) buildDocumentV3() *v3.Document {
 		Schemas: &v3.SchemasOrReferences{
 			AdditionalProperties: []*v3.NamedSchemaOrReference{},
 		},
+	}
+
+	for _, file := range g.plugin.Files {
+		for _, message := range file.Messages {
+			if _, ok := g.messageRegistry[string(message.Desc.FullName())]; !ok {
+				g.messageRegistry[string(message.Desc.FullName())] = message
+			}
+		}
 	}
 
 	// Go through the files and add the services to the documents, keeping
@@ -686,8 +699,57 @@ func (g *OpenAPIv3Generator) buildOperationV3(
 		},
 	}
 
+	var defaultResponseAdded bool
+
+	if customParams != nil {
+		for respKey, respValue := range customParams.CustomResponses {
+			if respValue == nil {
+				continue
+			}
+
+			var (
+				customResponseDesc    string
+				customResponseContent *v3.MediaTypes
+			)
+
+			if respValue.MessageRef != nil && *respValue.MessageRef != "" {
+				msg, ok := g.messageRegistry[*respValue.MessageRef]
+				if !ok {
+					grpclog.Errorf(
+						"Custom response message reference not found: %s: %+v",
+						*respValue.MessageRef, g.messageRegistry,
+					)
+
+					continue
+				}
+
+				_, customResponseContent = g.reflect.responseContentForMessage(msg.Desc)
+			}
+
+			if respValue.Description != nil {
+				customResponseDesc = *respValue.Description
+			}
+
+			responses.ResponseOrReference = append(responses.ResponseOrReference, &v3.NamedResponseOrReference{
+				Name: respKey,
+				Value: &v3.ResponseOrReference{
+					Oneof: &v3.ResponseOrReference_Response{
+						Response: &v3.Response{
+							Description: customResponseDesc,
+							Content:     customResponseContent,
+						},
+					},
+				},
+			})
+
+			if respKey == "default" {
+				defaultResponseAdded = true
+			}
+		}
+	}
+
 	// Add the default reponse if needed
-	if *g.conf.DefaultResponse {
+	if *g.conf.DefaultResponse && !defaultResponseAdded {
 		anySchemaName := g.reflect.formatMessageName(anyProtoDesc)
 		anySchema := wk.NewGoogleProtobufAnySchema(anySchemaName)
 		g.addSchemaToDocumentV3(d, anySchema)
@@ -712,6 +774,11 @@ func (g *OpenAPIv3Generator) buildOperationV3(
 
 		responses.ResponseOrReference = append(responses.ResponseOrReference, defaultResponse)
 	}
+
+	// sort responses
+	sort.Slice(responses.ResponseOrReference, func(i, j int) bool {
+		return responses.ResponseOrReference[i].Name < responses.ResponseOrReference[j].Name
+	})
 
 	// Create the operation.
 	op := &v3.Operation{
