@@ -715,10 +715,7 @@ func (g *OpenAPIv3Generator) buildOperationV3(
 			if respValue.MessageRef != nil && *respValue.MessageRef != "" {
 				msg, ok := g.messageRegistry[*respValue.MessageRef]
 				if !ok {
-					grpclog.Errorf(
-						"Custom response message reference not found: %s: %+v",
-						*respValue.MessageRef, g.messageRegistry,
-					)
+					grpclog.Errorf("Custom response message reference not found: %s", *respValue.MessageRef)
 
 					continue
 				}
