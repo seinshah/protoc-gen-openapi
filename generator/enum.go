@@ -37,7 +37,7 @@ func enumsToV3Any(field protoreflect.FieldDescriptor, enumValues ...int32) []*v3
 }
 
 func enumToStringSlice(field protoreflect.FieldDescriptor, enumValues ...int32) []string {
-	removeUnspecified := len(enumValues) == 0
+	removeUnspecified := false // TODO: (provide a message-level setting for this) len(enumValues) == 0
 	list := []string{}
 	values := field.Enum().Values()
 	for i := 0; i < values.Len(); i++ {
